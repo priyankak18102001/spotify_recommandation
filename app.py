@@ -3,71 +3,86 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors
 
-st.set_page_config(page_title="Spotify Dashboard", layout="wide")
+# Page Config
+st.set_page_config(page_title="Spotify Analytics Dashboard", layout="wide")
 
-st.title("🎵 Spotify User Dashboard")
+st.title("🎵 Spotify Analytics Dashboard")
 
 # Load Data
 @st.cache_data
 def load_data():
     df = pd.read_csv("spotify.xls")
+    df.rename(columns={"Unnamed: 0": "User"}, inplace=True)
     return df
 
 df = load_data()
 
-# Rename user column
-df.rename(columns={"Unnamed: 0": "User"}, inplace=True)
+# =========================
+# KPI CARDS
+# =========================
+total_users = df.shape[0]
+total_songs = df.shape[1] - 1
+total_streams = df.iloc[:, 1:].sum().sum()
 
-# Sidebar
-st.sidebar.header("Navigation")
-option = st.sidebar.radio(
-    "Select Section",
-    ["Dataset Overview", "User Analysis", "Recommendation System"]
-)
+col1, col2, col3 = st.columns(3)
 
-# SECTION 1: DATASET OVERVIEW
-if option == "Dataset Overview":
-    st.subheader("Dataset Preview")
-    st.dataframe(df.head())
+col1.metric("Total Users", total_users)
+col2.metric("Total Songs", total_songs)
+col3.metric("Total Streams", int(total_streams))
 
-    st.subheader("Dataset Shape")
-    st.write(df.shape)
+st.divider()
 
-# SECTION 2: USER ANALYSIS
-elif option == "User Analysis":
-    st.subheader("User Listening Summary")
+# =========================
+# TOP LISTENERS RANKING
+# =========================
+st.subheader("🏆 Top Listeners")
 
-    selected_user = st.selectbox("Select User", df["User"])
+df["Total Plays"] = df.iloc[:, 1:].sum(axis=1)
+top_users = df.sort_values("Total Plays", ascending=False).head(10)
 
-    user_data = df[df["User"] == selected_user].iloc[:, 1:]
+st.dataframe(top_users[["User", "Total Plays"]])
 
-    top_songs = user_data.T.sort_values(by=user_data.index[0], ascending=False).head(10)
+st.divider()
 
-    fig = plt.figure()
-    top_songs.plot(kind="bar")
-    plt.title("Top 10 Songs Played")
-    plt.ylabel("Play Count")
-    st.pyplot(fig)
+# =========================
+# INTERACTIVE CHART
+# =========================
+st.subheader("📊 User Listening Chart")
 
-# SECTION 3: RECOMMENDATION SYSTEM
-elif option == "Recommendation System":
-    st.subheader("Find Similar Users")
+selected_user = st.selectbox("Select User", df["User"])
 
-    users = df["User"]
-    features = df.iloc[:, 1:]
+user_data = df[df["User"] == selected_user].iloc[:, 1:-1].T
+user_data.columns = ["Play Count"]
+user_data = user_data.sort_values("Play Count", ascending=False).head(10)
 
-    model = NearestNeighbors(metric="cosine", algorithm="brute")
-    model.fit(features)
+fig = plt.figure()
+user_data.plot(kind="bar")
+plt.title("Top 10 Songs Played")
+plt.ylabel("Play Count")
+st.pyplot(fig)
 
-    selected_user = st.selectbox("Choose User", users)
+st.divider()
 
-    if st.button("Recommend"):
-        user_index = users[users == selected_user].index[0]
-        distances, indices = model.kneighbors(
-            [features.iloc[user_index]],
-            n_neighbors=6
-        )
+# =========================
+# RECOMMENDATION SYSTEM
+# =========================
+st.subheader("🤝 Similar User Recommendation")
 
-        st.write("### Similar Users")
-        for i in indices[0][1:]:
-            st.write(users.iloc[i])
+users = df["User"]
+features = df.iloc[:, 1:-1]
+
+model = NearestNeighbors(metric="cosine", algorithm="brute")
+model.fit(features)
+
+selected_user_rec = st.selectbox("Choose User for Recommendation", users)
+
+if st.button("Recommend Similar Users"):
+    user_index = users[users == selected_user_rec].index[0]
+    distances, indices = model.kneighbors(
+        [features.iloc[user_index]], 
+        n_neighbors=6
+    )
+
+    st.write("### Similar Users:")
+    for i in indices[0][1:]:
+        st.write(users.iloc[i])
